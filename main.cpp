@@ -3,7 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-using namespace std;
+
 int main(int argc, char *argv[]) {
   // Verificamos que se pase el archivo binario como argumento
   if (argc != 2) {
@@ -15,18 +15,31 @@ int main(int argc, char *argv[]) {
 
   // Intentamos cargar el programa en memoria
   if (!sim.load_program(argv[1])) {
-    return 1; // Terminamos si hay error al cargar
+    return 1;
   }
 
   string line;
-  cout << "Escribe 'exit' para salir o usa comandos: pc, step, regs, mem."
+  string last_line = ""; // Guarda el último comando ingresado
+
+  cout << "Escribe 'exit' para salir o usa comandos: run, pc, step, regs, mem."
        << "\n";
 
   // Bucle interactivo (REPL)
   while (true) {
     cout << "> ";
     if (!getline(cin, line))
-      break; // Salimos si se cierra el flujo de entrada
+      break;
+
+    // CORRECCIÓN: Si el usuario presiona Enter (línea vacía), usamos el último
+    // comando
+    if (line.empty()) {
+      line = last_line;
+      // Si es la primera vez y presionan Enter, no hacemos nada
+      if (line.empty())
+        continue;
+    } else {
+      last_line = line; // Guardamos el nuevo comando
+    }
 
     stringstream ss(line);
     string cmd;
@@ -37,14 +50,30 @@ int main(int argc, char *argv[]) {
       break;
     } else if (cmd == "step") {
       sim.step();
-      cout << "Ejecutando instrucción." << "\n";
+      cout << "Ejecutando instrucción. (PC: 0x" << hex << sim.get_pc() << dec
+           << ")" << "\n";
+    } else if (cmd == "run") {
+      // NUEVO COMANDO: Ejecuta automáticamente hasta encontrar el final del
+      // programa (memoria en 0)
+      cout << "Ejecutando programa automáticamente..." << "\n";
+      int steps = 0;
+      while (steps < 100000) { // Límite de seguridad
+        // Leemos la instrucción actual. Si es 0x00000000 asumimos que terminó
+        // el código
+        uint32_t inst = sim.read_word(sim.get_pc());
+        if (inst == 0x00000000)
+          break;
+
+        sim.step();
+        steps++;
+      }
+      cout << "Ejecución finalizada en " << steps << " pasos."
+           << "\n";
     } else if (cmd == "pc") {
-      // Imprime el PC en formato hexadecimal de 8 dígitos
       cout << "pc 0x" << setfill('0') << setw(8) << hex << sim.get_pc() << dec
            << "\n";
     } else if (cmd == "regs") {
       string reg_name;
-      // Si el usuario especifica registros específicos (ej. regs x5 x14)
       if (ss >> reg_name) {
         do {
           if (reg_name.size() > 1 && reg_name[0] == 'x') {
@@ -56,18 +85,16 @@ int main(int argc, char *argv[]) {
           }
         } while (ss >> reg_name);
       } else {
-        // Si solo escribe "regs", imprimimos los 32 registros
         for (int i = 0; i < 32; i++) {
           cout << "x" << setfill(' ') << setw(2) << dec << i << "=0x"
                << setfill('0') << setw(8) << hex << sim.get_reg(i) << " ";
           if ((i + 1) % 4 == 0)
-            cout << "\n"; // 4 columnas
+            cout << "\n";
         }
-        cout << dec; // Regresamos a decimal por defecto
+        cout << dec;
       }
     } else if (cmd == "mem") {
       string start_str, end_str;
-      // Espera dos direcciones en hexadecimal (ej. mem 0x1000 0x1003)
       if (ss >> start_str >> end_str) {
         try {
           uint32_t start = stoul(start_str, nullptr, 16);
@@ -79,15 +106,14 @@ int main(int argc, char *argv[]) {
           }
           cout << dec << "\n";
         } catch (...) {
-          cout << "Error: Las direcciones de memoria deben ser valores "
-                  "hexadecimales válidos."
+          cout << "Error: Las direcciones deben ser valores hexadecimales."
                << "\n";
         }
       } else {
         cout << "Uso: mem <inicio_hex> <fin_hex>" << "\n";
       }
-    } else if (!cmd.empty()) {
-      cout << "Comando desconocido. Usa: pc, step, regs [xN...], mem "
+    } else {
+      cout << "Comando desconocido. Usa: run, pc, step, regs [xN...], mem "
               "<inicio> <fin>, exit"
            << "\n";
     }
