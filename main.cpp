@@ -3,7 +3,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-
+using namespace std;
 int main(int argc, char *argv[]) {
   // Verificamos que se pase el archivo binario como argumento
   if (argc != 2) {
